@@ -21,9 +21,9 @@ if (typeof process.env.GEMINI_API_KEY === 'undefined') {
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model1 = genAI.getGenerativeModel({ model: "gemini-1.5-flash"  });
+const model1 = genAI.getGenerativeModel({ model: "gemini-2.5-flash"  });
 //@ts-ignore
-const model2 = genAI.getGenerativeModel({ model: "gemini-pro"} ,generationConfig, safetySettings );
+const model2 = genAI.getGenerativeModel({ model: "gemini-2.5-flash"} ,generationConfig, safetySettings );
 
 
 export const convertoBuffer = (path: string, mimeType: string) => {
