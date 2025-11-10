@@ -2,8 +2,6 @@ import { Request, Response } from 'express';
 import {
   getHealthLogs,
   getHealthLogById,
-  gethealthLogsByUserId,
-  gethealthLogsByPlantId,
   createHealthLog,
   deleteHealthLogById,
   updateHealthLogById,
@@ -13,17 +11,27 @@ import { uploadOnCloudinary } from '../utlils/cloudinary.js';
 import { convertoBuffer, provideHealthlog } from '../utlils/gemini.js';
 import { getValuePair, setValuePair } from '../utlils/redis.js';
 
+
 export const getAllHealthLogs = async (req: Request, res: Response): Promise<Response> => {
   try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const sortField = (req.query.sortField as string) || "createdAt";
+    const sortOrder = ((req.query.sortOrder as string) === "asc" ? "asc" : "desc") as "asc" | "desc";
 
-    const healthLogs = await getHealthLogs();
-    return res.status(200).json(healthLogs);
+    const cacheKey = `healthlogs:all?page=${page}&limit=${limit}&sort=${sortField}:${sortOrder}`;
+    const cached = await getValuePair(cacheKey);
+    if (cached) return res.status(200).json(cached);
+
+    const logs = await getHealthLogs({ page, limit, sortField, sortOrder });
+
+    await setValuePair(cacheKey, logs);
+    return res.status(200).json(logs);
   } catch (error) {
     console.error(error);
-    return res.sendStatus(400);
+    return res.status(500).json({ message: "Failed to fetch health logs" });
   }
 };
-
 export const getHealthLog = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { id } = req.params;
@@ -51,50 +59,56 @@ export const getHealthLog = async (req: Request, res: Response): Promise<Respons
 export const getHealthLogsByUserId = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ message: 'No user_id provided' });
-    }
-    
-    const redis = await getValuePair(`healthlogs/user/${id}`);
+    if (!id) return res.status(400).json({ message: "No user_id provided" });
 
-    if(redis){
-      return res.json(redis);
-    }
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
 
-    
-    const healthLogs = await gethealthLogsByUserId(id);
-    if (!healthLogs) {
-      return res.status(404).json({ message: 'HealthLogs not found' });
-    }
-    await setValuePair(`healthlogs/user/${id}`, healthLogs);
-    return res.json(healthLogs);
+    const cacheKey = `healthlogs:user:${id}?page=${page}&limit=${limit}`;
+    const cached = await getValuePair(cacheKey);
+    if (cached) return res.status(200).json(cached);
+
+    const logs = await getHealthLogs({
+      filter: { user_id: id },
+      page,
+      limit,
+      sortField: "createdAt",
+      sortOrder: "desc",
+    });
+
+    await setValuePair(cacheKey, logs); 
+    return res.status(200).json(logs);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: 'Server error' });
+    return res.status(500).json({ message: "Failed to fetch user logs" });
   }
 };
 
 export const getHealthLogsByPlantId = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ message: 'No plant_id provided' });
-    }
+    if (!id) return res.status(400).json({ message: "No plant_id provided" });
 
-    const redis = await getValuePair(`healthlogs/plant/${id}`);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
 
-    if(redis){
-      return res.json(redis);
-    }
-    const healthLogs = await gethealthLogsByPlantId(id);
-    if (!healthLogs) {
-      return res.status(404).json({ message: 'HealthLogs not found' });
-    }
-    await setValuePair(`healthlogs/plant/${id}`, healthLogs);
-    return res.json(healthLogs);
+    const cacheKey = `healthlogs:plant:${id}?page=${page}&limit=${limit}`;
+    const cached = await getValuePair(cacheKey);
+    if (cached) return res.status(200).json(cached);
+
+    const logs = await getHealthLogs({
+      filter: { plant_id: id },
+      page,
+      limit,
+      sortField: "createdAt",
+      sortOrder: "desc",
+    });
+
+    await setValuePair(cacheKey, logs);
+    return res.status(200).json(logs);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: 'Server error' });
+    return res.status(500).json({ message: "Failed to fetch plant logs" });
   }
 };
 

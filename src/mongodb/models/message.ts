@@ -19,7 +19,12 @@ export default Message;
 // Message Actions
 export const getMessages = () => Message.find();
 export const getMessageById = (id: string) => Message.findById(id);
-export const getMessagesByUserId = (userId: string) => Message.find({ user_id: userId });
+export const getMessagesByUserId = (userId: string, limit = 50, skip = 0) =>
+  Message.find({ user_id: userId })
+    .sort({ createdAt: -1 }) // 🧠 newest first
+    .skip(skip)
+    .limit(limit)
+    .lean(); // faster since it’s read-only
 export const createMessage = (values: MessageInput) => {
   console.log('Creating message with values:', values);
   return new Message(values).save()

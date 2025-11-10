@@ -32,19 +32,23 @@ export const getMessage = async (req: Request, res: Response): Promise<Response>
 export const getMessagesByuserId = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ message: 'No user_id provided' });
-    }
-    const messages = await getMessagesByUserId(id);
-    if (!messages) {
-      return res.status(404).json({ message: 'Messages not found' });
-    }
-    return res.json(messages);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 30;
+    const skip = (page - 1) * limit;
+
+    const messages = await getMessagesByUserId(id, limit, skip);
+
+    return res.status(200).json({
+      data: messages,
+      page,
+      limit,
+    });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
+    console.error("Error fetching messages:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
+
 
 export const createNewMessage = async (req: Request, res: Response): Promise<Response> => {
   try {

@@ -1,15 +1,33 @@
 import { Request, Response } from 'express';
-import { getPlants, getPlantById, getPlantsByUserId, createPlant, deletePlantById, updatePlantById } from '../mongodb/models/plant.js';
+import { getPlants, getPlantById, createPlant, deletePlantById, updatePlantById } from '../mongodb/models/plant.js';
 import { uploadOnCloudinary } from '../utlils/cloudinary.js';
 import { getValuePair, setValuePair } from '../utlils/redis.js';
 
 export const getAllPlants = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const plants = await getPlants();
-    return res.status(200).json(plants);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const sortField = (req.query.sortField as string) || "createdAt";
+    let sortOrder = (req.query.sortOrder as string) || "desc";
+    if (sortOrder !== "asc" && sortOrder !== "desc") sortOrder = "desc";
+
+    const cacheKey = `plants/all?page=${page}&limit=${limit}&sort=${sortField}:${sortOrder}`;
+    const cached = await getValuePair(cacheKey);
+    if (cached) return res.status(200).json(cached);
+
+    const response = await getPlants({
+      page,
+      limit,
+      sortField,
+      sortOrder: sortOrder as "asc" | "desc",
+      lean: true,
+    });
+
+    await setValuePair(cacheKey, response);
+    return res.status(200).json(response);
   } catch (error) {
-    console.log(error);
-    return res.sendStatus(400);
+    console.error("Error fetching all plants:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -41,29 +59,39 @@ export const getPlant = async (req: Request, res: Response): Promise<Response> =
   }
 };
 
-export const getPlantsByuserId = async (req: Request, res: Response): Promise<Response> => {
+export const getPlantsByUserId = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ message: 'No user_id provided' });
-    }
-    const redis = await getValuePair(`plants/user/${id}`);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const sortField = (req.query.sortField as string) || "createdAt";
+    let sortOrder = (req.query.sortOrder as string) || "desc";
 
-    if(redis){
-      return res.json(redis);
-    }
+    if (!id) return res.status(400).json({ message: "No user_id provided" });
+    if (sortOrder !== "asc" && sortOrder !== "desc") sortOrder = "desc";
 
-    const plants = await getPlantsByUserId(id);
-    if (!plants) {
-      return res.status(404).json({ message: 'Plants not found' });
-    }
-    await setValuePair(`plants/user/${id}`, plants);
-    return res.json(plants);
+    const cacheKey = `plants/user/${id}?page=${page}&limit=${limit}&sort=${sortField}:${sortOrder}`;
+    const cached = await getValuePair(cacheKey);
+    if (cached) return res.status(200).json(cached);
+
+    // ✅ Just use getPlants() with filter
+    const response = await getPlants({
+      filter: { user_id: id },
+      page,
+      limit,
+      sortField,
+      sortOrder: sortOrder as "asc" | "desc",
+      lean: true, // 🚀 faster read-only queries
+    });
+
+    await setValuePair(cacheKey, response);
+    return res.status(200).json(response);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
+    console.error("Error fetching user plants:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
+
 
 export const createNewPlant = async (req: Request, res: Response): Promise<Response> => {
   try {
